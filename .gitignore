@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+
+MASC/
+*.zip
+
+data/train.jsonl
+data/valid.jsonl
+data/test.jsonl
+
+models/*.pt
+
+.idea/
+.vscode/
+
+results/
