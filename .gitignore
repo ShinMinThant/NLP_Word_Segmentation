@@ -1,17 +1,17 @@
+
+.venv/
 venv/
 __pycache__/
 *.pyc
 
 MASC/
+GUM_temp/
+backup_before_fixes/
 *.zip
 
-data/train.jsonl
-data/valid.jsonl
-data/test.jsonl
-
+data/
 models/*.pt
 
 .idea/
 .vscode/
-
-results/
+git status

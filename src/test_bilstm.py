@@ -1,6 +1,6 @@
-import json
-from pathlib import Path
+﻿import json
 import sys
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
@@ -12,45 +12,24 @@ from dataset import WordSegmentationDataset, collate_fn
 from models.bilstm import BiLSTMWordSegmentation
 
 
-# =========================
-# Configuration
-# =========================
-
 TEST_PATH = "./data/test.jsonl"
 VOCAB_PATH = "./data/vocab.json"
-MODEL_PATH = "./models/bilstm_best.pt"
+MODEL_PATH = "./models/bilstm_masc_v2_best.pt"
+BATCH_SIZE = 16
 
-BATCH_SIZE = 32
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-DEVICE = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
-)
-
-
-# =========================
-# Main
-# =========================
 
 def main():
-
     print("=" * 60)
-    print("BiLSTM Test Evaluation")
+    print("MASC BiLSTM Test Evaluation")
     print("=" * 60)
-
     print("Device:", DEVICE)
 
-    # Load vocabulary
     with open(VOCAB_PATH, "r", encoding="utf-8") as f:
         vocab = json.load(f)
 
-    vocab_size = len(vocab)
-
-    # Load test dataset
-    test_dataset = WordSegmentationDataset(
-        TEST_PATH,
-        VOCAB_PATH
-    )
-
+    test_dataset = WordSegmentationDataset(TEST_PATH, VOCAB_PATH)
     test_loader = DataLoader(
         test_dataset,
         batch_size=BATCH_SIZE,
@@ -58,95 +37,65 @@ def main():
         collate_fn=collate_fn
     )
 
-    # Load checkpoint
-    checkpoint = torch.load(
-        MODEL_PATH,
-        map_location=DEVICE
-    )
+    checkpoint_path = Path(MODEL_PATH)
+    if not checkpoint_path.exists():
+        print(f"Checkpoint not found: {MODEL_PATH}")
+        print("Train the MASC BiLSTM model first.")
+        return
 
-    # Create model
+    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE)
+
     model = BiLSTMWordSegmentation(
-        vocab_size=vocab_size,
+        vocab_size=checkpoint.get("vocab_size", len(vocab)),
         embedding_dim=checkpoint["embedding_dim"],
         hidden_dim=checkpoint["hidden_dim"],
         num_layers=checkpoint["num_layers"],
-        dropout=0.2
-    )
+        dropout=checkpoint.get("dropout", 0.2)
+    ).to(DEVICE)
 
-    model.load_state_dict(
-        checkpoint["model_state_dict"]
-    )
-
-    model = model.to(DEVICE)
+    model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
     all_predictions = []
     all_labels = []
 
-    print("\nRunning evaluation...\n")
+    print("Test samples:", len(test_dataset))
+    print("Running evaluation...")
 
     with torch.no_grad():
-
-        for batch_index, (
-            input_ids,
-            labels,
-            attention_mask
-        ) in enumerate(test_loader, start=1):
-
+        for batch_index, (input_ids, labels, attention_mask) in enumerate(
+            test_loader, start=1
+        ):
             input_ids = input_ids.to(DEVICE)
             labels = labels.to(DEVICE)
+            attention_mask = attention_mask.to(DEVICE)
 
-            logits = model(input_ids)
+            lengths = attention_mask.sum(dim=1)
+            logits = model(input_ids, lengths)
+            predictions = torch.argmax(logits, dim=-1)
 
-            predictions = torch.argmax(
-                logits,
-                dim=-1
-            )
-
-            # Ignore padded label positions
             valid_mask = labels != -100
-
-            all_predictions.extend(
-                predictions[valid_mask].cpu().tolist()
-            )
-
-            all_labels.extend(
-                labels[valid_mask].cpu().tolist()
-            )
+            all_predictions.extend(predictions[valid_mask].cpu().tolist())
+            all_labels.extend(labels[valid_mask].cpu().tolist())
 
             if batch_index % 50 == 0:
-                print(
-                    f"Processed batches: "
-                    f"{batch_index}/{len(test_loader)}"
-                )
+                print(f"Processed batches: {batch_index}/{len(test_loader)}")
 
-    # Calculate metrics
-    precision, recall, f1, _ = (
-        precision_recall_fscore_support(
-            all_labels,
-            all_predictions,
-            average="binary",
-            zero_division=0
-        )
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        all_labels,
+        all_predictions,
+        average="binary",
+        zero_division=0
     )
 
     print("\n" + "=" * 60)
-    print("BiLSTM TEST RESULTS")
+    print("MASC BiLSTM TEST RESULTS")
     print("=" * 60)
-
-    print(f"Precision : {precision:.4f}")
-    print(f"Recall    : {recall:.4f}")
-    print(f"F1-score  : {f1:.4f}")
-
-    print("\nPercentage:")
-    print(f"Precision : {precision * 100:.2f}%")
-    print(f"Recall    : {recall * 100:.2f}%")
-    print(f"F1-score  : {f1 * 100:.2f}%")
-
+    print(f"Precision: {precision:.4f} ({precision * 100:.2f}%)")
+    print(f"Recall   : {recall:.4f} ({recall * 100:.2f}%)")
+    print(f"F1-score : {f1:.4f} ({f1 * 100:.2f}%)")
     print("=" * 60)
 
 
 if __name__ == "__main__":
     main()
-
-

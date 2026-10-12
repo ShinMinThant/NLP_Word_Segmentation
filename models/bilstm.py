@@ -1,5 +1,6 @@
-import torch
+﻿import torch
 import torch.nn as nn
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
 class BiLSTMWordSegmentation(nn.Module):
@@ -28,41 +29,46 @@ class BiLSTMWordSegmentation(nn.Module):
             dropout=dropout if num_layers > 1 else 0
         )
 
-        self.classifier = nn.Linear(
-            hidden_dim * 2,
-            2
-        )
+        self.classifier = nn.Linear(hidden_dim * 2, 2)
 
-    def forward(self, input_ids):
-        # input_ids: [batch_size, sequence_length]
+    def forward(self, input_ids, lengths=None):
+        # input_ids shape: [batch_size, sequence_length]
         embedded = self.embedding(input_ids)
 
-        # [batch_size, sequence_length, hidden_dim * 2]
-        encoded, _ = self.lstm(embedded)
+        if lengths is not None:
+            # Ignore padded characters inside the BiLSTM.
+            packed = pack_padded_sequence(
+                embedded,
+                lengths.detach().cpu(),
+                batch_first=True,
+                enforce_sorted=False
+            )
 
-        # We predict boundaries between characters.
-        # Therefore, for sequence length N,
-        # we need predictions for N - 1 gaps.
+            packed_encoded, _ = self.lstm(packed)
+
+            encoded, _ = pad_packed_sequence(
+                packed_encoded,
+                batch_first=True,
+                total_length=input_ids.size(1)
+            )
+        else:
+            # Kept for compatibility with older code.
+            encoded, _ = self.lstm(embedded)
+
+        # Predict boundaries between adjacent characters.
         gap_features = encoded[:, :-1, :] + encoded[:, 1:, :]
-
-        # [batch_size, sequence_length - 1, 2]
         logits = self.classifier(gap_features)
 
         return logits
 
 
 if __name__ == "__main__":
-    model = BiLSTMWordSegmentation(
-        vocab_size=159
-    )
+    model = BiLSTMWordSegmentation(vocab_size=159)
 
-    dummy_input = torch.randint(
-        low=0,
-        high=159,
-        size=(4, 124)
-    )
+    dummy_input = torch.randint(1, 159, (4, 124))
+    dummy_lengths = torch.tensor([124, 100, 80, 60])
 
-    output = model(dummy_input)
+    output = model(dummy_input, dummy_lengths)
 
     print("BiLSTM model created successfully!")
     print("Input shape:", dummy_input.shape)

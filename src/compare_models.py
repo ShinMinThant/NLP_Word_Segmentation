@@ -1,19 +1,17 @@
 ﻿import pandas as pd
 
-RESULTS_PATH = "./results/model_comparison.csv"
+RESULTS_PATH = "./results/corpus_model_comparison.csv"
 
 
 def main():
-
-    print("=" * 70)
-    print("BiLSTM vs Transformer Comparison")
-    print("=" * 70)
-
     df = pd.read_csv(RESULTS_PATH)
 
-    # Display test results
-    print("\nTest Results:")
-    print("-" * 70)
+    print("=" * 72)
+    print("NLP WORD SEGMENTATION: MODEL AND CORPUS COMPARISON")
+    print("=" * 72)
+
+    print("\n1. TEST RESULTS")
+    print("-" * 72)
 
     print(
         df.to_string(
@@ -21,60 +19,59 @@ def main():
             formatters={
                 "Precision": "{:.4f}".format,
                 "Recall": "{:.4f}".format,
-                "F1-score": "{:.4f}".format
-            }
+                "F1-score": "{:.4f}".format,
+            },
         )
     )
 
-    # Get model results
-    bilstm = df[df["Model"] == "BiLSTM"].iloc[0]
-    transformer = df[df["Model"] == "Transformer"].iloc[0]
+    print("\n2. BiLSTM vs Transformer WITHIN EACH CORPUS")
+    print("-" * 72)
 
-    # Compare metrics
-    print("\n" + "=" * 70)
-    print("Metric Comparison")
-    print("=" * 70)
+    for corpus in df["Corpus"].unique():
+        subset = df[df["Corpus"] == corpus]
+        bilstm = subset[subset["Model"] == "BiLSTM"].iloc[0]
+        transformer = subset[subset["Model"] == "Transformer"].iloc[0]
 
-    for metric in ["Precision", "Recall", "F1-score"]:
+        difference = (bilstm["F1-score"] - transformer["F1-score"]) * 100
 
-        bilstm_score = bilstm[metric]
-        transformer_score = transformer[metric]
+        print(f"\n{corpus}:")
+        print(f"  BiLSTM F1:      {bilstm['F1-score'] * 100:.2f}%")
+        print(f"  Transformer F1: {transformer['F1-score'] * 100:.2f}%")
 
-        difference = bilstm_score - transformer_score
-
-        if bilstm_score > transformer_score:
-            higher_model = "BiLSTM"
-        elif transformer_score > bilstm_score:
-            higher_model = "Transformer"
+        if difference > 0:
+            print(f"  Higher F1: BiLSTM (+{difference:.2f} percentage points)")
+        elif difference < 0:
+            print(f"  Higher F1: Transformer (+{-difference:.2f} percentage points)")
         else:
-            higher_model = "Tie"
+            print("  F1 result: Tie")
 
+    print("\n3. BEST MODEL IN EACH CORPUS")
+    print("-" * 72)
+
+    for corpus in df["Corpus"].unique():
+        subset = df[df["Corpus"] == corpus]
+        best = subset.loc[subset["F1-score"].idxmax()]
         print(
-            f"{metric:<10}: {higher_model} performed higher "
-            f"({difference * 100:.2f} percentage points difference)"
+            f"{corpus}: {best['Model']} "
+            f"(F1 = {best['F1-score'] * 100:.2f}%)"
         )
 
-    # Overall comparison based on F1-score
-    print("\n" + "=" * 70)
-    print("Overall Comparison")
-    print("=" * 70)
-
-    if bilstm["F1-score"] > transformer["F1-score"]:
-        overall_model = "BiLSTM"
-    elif transformer["F1-score"] > bilstm["F1-score"]:
-        overall_model = "Transformer"
-    else:
-        overall_model = "Tie"
-
-    print(f"BiLSTM F1-score     : {bilstm['F1-score'] * 100:.2f}%")
-    print(f"Transformer F1-score: {transformer['F1-score'] * 100:.2f}%")
-
+    print("\n4. INTERPRETATION")
+    print("-" * 72)
     print(
-        f"\nBased on the test-set F1-score, "
-        f"{overall_model} performed higher in this experiment."
+        "BiLSTM achieved a higher test F1-score than Transformer "
+        "in both reported corpus experiments."
+    )
+    print(
+        "These are within-corpus results. They do not, by themselves, "
+        "measure cross-corpus generalization."
+    )
+    print(
+        "Confirm consistent preprocessing, label construction, and "
+        "evaluation before drawing final conclusions."
     )
 
-    print("=" * 70)
+    print("\n" + "=" * 72)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,3 @@
+﻿Model,Precision,Recall,F1-score
+BiLSTM,0.9640,0.9606,0.9623
+Transformer,0.8851,0.8675,0.8762
